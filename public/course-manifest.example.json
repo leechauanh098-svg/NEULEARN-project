@@ -1,0 +1,12 @@
+[
+  {
+    "course": "Mạng máy tính",
+    "category": "Cơ sở ngành",
+    "description": "Kiến thức nền tảng về mạng máy tính và Internet."
+  },
+  {
+    "course": "Lập trình Python",
+    "category": "Lập trình",
+    "description": "Cú pháp Python, cấu trúc dữ liệu và tư duy giải quyết bài toán."
+  }
+]
