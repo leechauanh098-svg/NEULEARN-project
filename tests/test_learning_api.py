@@ -1,7 +1,9 @@
 import unittest
-from unittest.mock import patch
+from io import BytesIO
+from unittest.mock import MagicMock, patch
 
 from app import app
+from learning_api import _storage_request
 
 
 class LearningApiTests(unittest.TestCase):
@@ -48,6 +50,7 @@ class LearningApiTests(unittest.TestCase):
             "/rest/v1/profiles?id=eq.student-id",
             method="PATCH",
             payload={"full_name": "New Name"},
+            access_token="access-token",
         )
 
     def test_profile_name_update_rejects_empty_name(self):
@@ -110,6 +113,7 @@ class LearningApiTests(unittest.TestCase):
                 "description": "",
                 "created_by": "lecturer-id",
             },
+            access_token="access-token",
         )
 
     def test_learning_endpoint_returns_all_courses(self):
@@ -129,7 +133,7 @@ class LearningApiTests(unittest.TestCase):
             for index in range(18)
         ]
         with patch("learning_api._current_user", return_value=user):
-            with patch("learning_api._rest_rows", side_effect=[courses, []]):
+            with patch("learning_api._rest_rows", side_effect=[courses, []]) as supabase_request:
                 response = self.client.get(
                     "/api/learning",
                     headers={"Authorization": "Bearer access-token"},
@@ -137,6 +141,88 @@ class LearningApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["courses"]), 18)
+        for call in supabase_request.call_args_list:
+            self.assertEqual(call.kwargs["access_token"], "access-token")
+
+    def test_signed_pdf_url_uses_authenticated_user_credentials(self):
+        user = {
+            "id": "student-id",
+            "token": "access-token",
+            "profile": {"role": "student"},
+        }
+        with patch("learning_api._current_user", return_value=user):
+            with patch("learning_api._owned_row", return_value={"file_path": "lecturer-id/file.pdf"}) as owned_row:
+                with patch("learning_api._storage_request", return_value={"signedURL": "/object/sign/file?token=abc"}) as storage_request:
+                    response = self.client.get("/api/materials/material-id/signed-url")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["signedUrl"],
+            "https://example.supabase.co/storage/v1/object/sign/file?token=abc",
+        )
+        owned_row.assert_called_once_with(
+            "lecture_materials",
+            "material-id",
+            "file_path",
+            access_token="access-token",
+        )
+        self.assertEqual(storage_request.call_args.kwargs["access_token"], "access-token")
+
+    def test_admin_uploads_pdf_using_their_authenticated_session(self):
+        user = {
+            "id": "lecturer-id",
+            "token": "access-token",
+            "profile": {"role": "admin", "full_name": "Admin"},
+        }
+        course = {
+            "id": "course-id",
+            "created_by": "another-lecturer-id",
+        }
+        material = {
+            "id": "material-id",
+            "course_id": "course-id",
+            "title": "Lecture",
+        }
+        with patch("learning_api._current_user", return_value=user):
+            with patch("learning_api._owned_row", return_value=course):
+                with patch("learning_api._storage_request") as storage_request:
+                    with patch("learning_api._rest_rows", return_value=[material]) as rest_rows:
+                        response = self.client.post(
+                            "/api/materials",
+                            data={
+                                "courseId": "course-id",
+                                "title": "Lecture",
+                                "chapter": "Chapter 1",
+                                "description": "",
+                                "slideCount": "1",
+                                "file": (BytesIO(b"%PDF-1.4 test"), "lecture.pdf"),
+                            },
+                        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json(), {"material": material})
+        self.assertEqual(storage_request.call_args.kwargs["access_token"], "access-token")
+        self.assertEqual(rest_rows.call_args.kwargs["access_token"], "access-token")
+
+    def test_authenticated_storage_request_does_not_require_service_role_key(self):
+        app.config["SUPABASE_SERVICE_ROLE_KEY"] = None
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b"{}"
+
+        with app.app_context():
+            with patch("urllib.request.urlopen", return_value=response) as urlopen:
+                result = _storage_request(
+                    "POST",
+                    "/storage/v1/object/lecture-materials/file.pdf",
+                    b"%PDF-1.4 test",
+                    "application/pdf",
+                    access_token="user-access-token",
+                )
+
+        self.assertEqual(result, {})
+        upstream_request = urlopen.call_args.args[0]
+        self.assertEqual(upstream_request.get_header("Apikey"), "test-anon-key")
+        self.assertEqual(upstream_request.get_header("Authorization"), "Bearer user-access-token")
 
     def test_daily_activity_rejects_invalid_date(self):
         user = {

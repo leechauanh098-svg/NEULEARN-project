@@ -40,10 +40,11 @@ Mở `.env.local` và điền thông tin Supabase:
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+# Chỉ cần cho API quản lý tài khoản trên Flask tin cậy; không chia sẻ khóa này
+# SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` là khóa bí mật chỉ được sử dụng ở Flask. Không đổi tên thành `NEXT_PUBLIC_*`, không đưa khóa này vào frontend và không commit giá trị thật.
+Flask dùng URL và publishable key cùng access token của người dùng cho đăng nhập, xem tài liệu, thống kê và thao tác môn học/học liệu được RLS cho phép. Mọi bản clone dùng chung Supabase project này sẽ thấy cùng danh sách môn và PDF sau khi đăng nhập. Tài khoản, môn học và PDF nằm trong Supabase, không được đóng gói trong Git.
 
 ## Cấu hình Supabase
 
@@ -133,7 +134,7 @@ out/                     Frontend static export được tạo bởi npm run bui
 ## Xử lý sự cố
 
 - **Không mở được ứng dụng / Flask báo thiếu frontend:** chạy `npm run build`, sau đó khởi động lại Flask.
-- **Danh sách môn học hoặc hồ sơ không tải:** mở ứng dụng qua Flask hoặc kiểm tra `NEXT_PUBLIC_FLASK_API_URL`; kiểm tra URL và service-role key trong `.env.local`.
+- **Danh sách môn học hoặc hồ sơ không tải:** mở ứng dụng qua Flask hoặc kiểm tra `NEXT_PUBLIC_FLASK_API_URL`; xác nhận URL Supabase và publishable key trỏ tới project có dữ liệu, rồi đăng nhập bằng tài khoản của project đó.
 - **API hoạt động nhưng yêu cầu đăng nhập thất bại:** đăng nhập lại để lấy phiên Supabase hợp lệ.
 - **Không thấy nút quản lý:** kiểm tra vai trò trong `public.profiles`. Admin cần `role = 'admin'`; giảng viên cần `role = 'lecturer'`.
 - **Đổi mã Flask nhưng ứng dụng vẫn chạy hành vi cũ:** dừng đúng tiến trình Flask đang chạy bằng `Ctrl+C` rồi khởi động lại.

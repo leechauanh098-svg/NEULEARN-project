@@ -14,8 +14,8 @@ MATERIAL_SELECT = "id,course_id,title,chapter,description,teacher_name,file_path
 COURSE_SELECT = "id,name,category,description,created_by"
 
 
-def _rest_rows(path, method="GET", payload=None):
-    result = _supabase_request(method, path, payload)
+def _rest_rows(path, method="GET", payload=None, access_token=None):
+    result = _supabase_request(method, path, payload, access_token=access_token)
     if result is None:
         return []
     if isinstance(result, list):
@@ -47,9 +47,10 @@ def _require_manager(user):
     return role
 
 
-def _owned_row(table, row_id, select):
+def _owned_row(table, row_id, select, access_token=None):
     rows = _rest_rows(
-        f"/rest/v1/{table}?select={select}&id=eq.{quote(row_id, safe='')}"
+        f"/rest/v1/{table}?select={select}&id=eq.{quote(row_id, safe='')}",
+        access_token=access_token,
     )
     if not rows:
         raise AdminApiError(404, "Không tìm thấy nội dung cần thao tác.")
@@ -62,15 +63,17 @@ def _require_content_owner(user, row, owner_field):
         raise AdminApiError(403, "Bạn chỉ được sửa nội dung do mình tạo.")
 
 
-def _storage_request(method, path, data=None, content_type="application/json"):
+def _storage_request(method, path, data=None, content_type="application/json", access_token=None):
     base_url = current_app.config.get("SUPABASE_URL")
     service_key = current_app.config.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not base_url or not service_key:
-        raise AdminApiError(503, "Flask chưa được cấu hình Supabase service-role key.")
+    anon_key = current_app.config.get("SUPABASE_ANON_KEY")
+    key = anon_key if access_token else service_key
+    if not base_url or not key or (not access_token and not service_key):
+        raise AdminApiError(503, "Flask chưa được cấu hình đầy đủ thông tin Supabase Storage.")
 
     headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
+        "apikey": key,
+        "Authorization": f"Bearer {access_token or service_key}",
         "Accept": "application/json",
     }
     if data is not None:
@@ -107,11 +110,12 @@ def _storage_request(method, path, data=None, content_type="application/json"):
         return response_body.decode("utf-8", errors="replace")
 
 
-def _remove_storage_file(file_path):
+def _remove_storage_file(file_path, access_token=None):
     return _storage_request(
         "DELETE",
         "/storage/v1/object/lecture-materials",
         json.dumps({"prefixes": [file_path]}).encode("utf-8"),
+        access_token=access_token,
     )
 
 
@@ -147,6 +151,7 @@ def update_profile():
         f"/rest/v1/profiles?id=eq.{quote(user['id'], safe='')}",
         method="PATCH",
         payload={"full_name": full_name},
+        access_token=user["token"],
     )
     if not rows:
         raise AdminApiError(404, "Không tìm thấy hồ sơ để cập nhật.")
@@ -163,12 +168,14 @@ def update_profile():
 
 @learning_api.get("/learning")
 def get_learning_content():
-    _current_user()
+    user = _current_user()
     courses = _rest_rows(
-        f"/rest/v1/courses?select={COURSE_SELECT}&order=name"
+        f"/rest/v1/courses?select={COURSE_SELECT}&order=name",
+        access_token=user["token"],
     )
     materials = _rest_rows(
-        f"/rest/v1/lecture_materials?select={MATERIAL_SELECT}&order=created_at.desc"
+        f"/rest/v1/lecture_materials?select={MATERIAL_SELECT}&order=created_at.desc",
+        access_token=user["token"],
     )
     return jsonify(courses=courses, materials=materials)
 
@@ -178,7 +185,8 @@ def get_study_history():
     user = _current_user()
     history = _rest_rows(
         "/rest/v1/study_history?select=resource_id,study_seconds,question_count,last_accessed_at"
-        f"&user_id=eq.{quote(user['id'], safe='')}"
+        f"&user_id=eq.{quote(user['id'], safe='')}",
+        access_token=user["token"],
     )
     return jsonify(history=history)
 
@@ -192,7 +200,8 @@ def get_daily_study_activity():
     rows = _rest_rows(
         "/rest/v1/study_activity_daily?select=activity_date,resource_id,study_seconds,was_accessed"
         f"&user_id=eq.{quote(user['id'], safe='')}"
-        f"&activity_date=gte.{quote(first_date, safe='')}"
+        f"&activity_date=gte.{quote(first_date, safe='')}",
+        access_token=user["token"],
     )
     return jsonify(activity=rows)
 
@@ -207,6 +216,7 @@ def cleanup_daily_study_activity():
         f"/rest/v1/study_activity_daily?user_id=eq.{quote(user['id'], safe='')}"
         f"&activity_date=lt.{quote(first_date, safe='')}",
         method="DELETE",
+        access_token=user["token"],
     )
     return jsonify(deleted=True)
 
@@ -242,13 +252,14 @@ def record_study_activity():
 
 @learning_api.get("/materials/<material_id>/signed-url")
 def get_material_signed_url(material_id):
-    _current_user()
-    material = _owned_row("lecture_materials", material_id, "file_path")
+    user = _current_user()
+    material = _owned_row("lecture_materials", material_id, "file_path", access_token=user["token"])
     encoded_path = quote(material["file_path"], safe="/")
     result = _storage_request(
         "POST",
         f"/storage/v1/object/sign/lecture-materials/{encoded_path}",
         json.dumps({"expiresIn": 3600}).encode("utf-8"),
+        access_token=user["token"],
     )
     signed_url = result.get("signedURL") if isinstance(result, dict) else None
     if not isinstance(signed_url, str) or not signed_url:
@@ -276,6 +287,7 @@ def create_course():
         f"/rest/v1/courses?select={COURSE_SELECT}",
         method="POST",
         payload=course,
+        access_token=user["token"],
     )
     if not rows:
         raise AdminApiError(502, "Không tạo được môn học.")
@@ -293,7 +305,10 @@ def import_courses():
     if len(inputs) > 200:
         raise AdminApiError(400, "Mỗi lần chỉ nhập tối đa 200 môn học.")
 
-    existing_rows = _rest_rows(f"/rest/v1/courses?select=name")
+    existing_rows = _rest_rows(
+        f"/rest/v1/courses?select=name",
+        access_token=user["token"],
+    )
     known_names = {str(item["name"]).casefold() for item in existing_rows}
     created, skipped, failed = [], 0, []
     for item in inputs:
@@ -311,6 +326,7 @@ def import_courses():
                 f"/rest/v1/courses?select={COURSE_SELECT}",
                 method="POST",
                 payload={"name": name, "category": category, "description": description, "created_by": user["id"]},
+                access_token=user["token"],
             )
             if not rows:
                 raise AdminApiError(502, "Máy chủ không trả về môn học vừa tạo.")
@@ -327,7 +343,7 @@ def import_courses():
 @learning_api.patch("/courses/<course_id>")
 def update_course(course_id):
     user = _current_user()
-    current = _owned_row("courses", course_id, "id,created_by")
+    current = _owned_row("courses", course_id, "id,created_by", access_token=user["token"])
     _course_permission(user, current)
     body = _json_body()
     values = {
@@ -339,6 +355,7 @@ def update_course(course_id):
         f"/rest/v1/courses?select={COURSE_SELECT}&id=eq.{quote(course_id, safe='')}",
         method="PATCH",
         payload=values,
+        access_token=user["token"],
     )
     if not rows:
         raise AdminApiError(404, "Không tìm thấy môn học cần cập nhật.")
@@ -348,16 +365,18 @@ def update_course(course_id):
 @learning_api.delete("/courses/<course_id>")
 def delete_course(course_id):
     user = _current_user()
-    current = _owned_row("courses", course_id, "id,created_by")
+    current = _owned_row("courses", course_id, "id,created_by", access_token=user["token"])
     _course_permission(user, current)
     materials = _rest_rows(
-        f"/rest/v1/lecture_materials?select=id&course_id=eq.{quote(course_id, safe='')}"
+        f"/rest/v1/lecture_materials?select=id&course_id=eq.{quote(course_id, safe='')}",
+        access_token=user["token"],
     )
     if materials:
         raise AdminApiError(409, "Môn này còn tài liệu. Hãy xóa tài liệu trước.")
     rows = _rest_rows(
         f"/rest/v1/courses?id=eq.{quote(course_id, safe='')}",
         method="DELETE",
+        access_token=user["token"],
     )
     if rows == []:
         return jsonify(deleted=True)
@@ -380,7 +399,7 @@ def upload_material():
         raise AdminApiError(400, "File được chọn không phải PDF hợp lệ.")
 
     course_id = request.form.get("courseId", "")
-    course = _owned_row("courses", course_id, COURSE_SELECT)
+    course = _owned_row("courses", course_id, COURSE_SELECT, access_token=user["token"])
     _course_permission(user, course)
     title = request.form.get("title", "").strip()
     chapter = request.form.get("chapter", "").strip()
@@ -400,6 +419,7 @@ def upload_material():
         f"/storage/v1/object/lecture-materials/{quote(file_path, safe='/')}",
         file_bytes,
         "application/pdf",
+        access_token=user["token"],
     )
     row = {
         "course_id": course["id"],
@@ -418,10 +438,11 @@ def upload_material():
             f"/rest/v1/lecture_materials?select={MATERIAL_SELECT}",
             method="POST",
             payload=row,
+            access_token=user["token"],
         )
     except AdminApiError as error:
         try:
-            _remove_storage_file(file_path)
+            _remove_storage_file(file_path, access_token=user["token"])
         except AdminApiError as cleanup_error:
             current_app.logger.error("Could not remove unregistered uploaded PDF: %s", cleanup_error.message)
         raise error
@@ -433,7 +454,12 @@ def upload_material():
 @learning_api.patch("/materials/<material_id>")
 def update_material(material_id):
     user = _current_user()
-    current = _owned_row("lecture_materials", material_id, "id,uploaded_by")
+    current = _owned_row(
+        "lecture_materials",
+        material_id,
+        "id,uploaded_by",
+        access_token=user["token"],
+    )
     _require_content_owner(user, current, "uploaded_by")
     body = _json_body()
     slide_count = body.get("slideCount")
@@ -449,6 +475,7 @@ def update_material(material_id):
         f"/rest/v1/lecture_materials?select={MATERIAL_SELECT}&id=eq.{quote(material_id, safe='')}",
         method="PATCH",
         payload=values,
+        access_token=user["token"],
     )
     if not rows:
         raise AdminApiError(404, "Không tìm thấy tài liệu cần cập nhật.")
@@ -458,16 +485,22 @@ def update_material(material_id):
 @learning_api.delete("/materials/<material_id>")
 def delete_material(material_id):
     user = _current_user()
-    current = _owned_row("lecture_materials", material_id, "id,uploaded_by,file_path")
+    current = _owned_row(
+        "lecture_materials",
+        material_id,
+        "id,uploaded_by,file_path",
+        access_token=user["token"],
+    )
     _require_content_owner(user, current, "uploaded_by")
     rows = _rest_rows(
         f"/rest/v1/lecture_materials?id=eq.{quote(material_id, safe='')}",
         method="DELETE",
+        access_token=user["token"],
     )
     if not rows:
         raise AdminApiError(404, "Không tìm thấy tài liệu cần xóa.")
     try:
-        _remove_storage_file(current["file_path"])
+        _remove_storage_file(current["file_path"], access_token=user["token"])
     except AdminApiError as error:
         raise AdminApiError(502, f"Đã xóa thông tin tài liệu nhưng không xóa được file PDF: {error.message}") from error
     return jsonify(deleted=True)
