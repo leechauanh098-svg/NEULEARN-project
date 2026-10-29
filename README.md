@@ -32,10 +32,10 @@ Mở PowerShell tại thư mục dự án:
 ```powershell
 npm install
 python -m pip install -r requirements.txt
-Copy-Item .env.example .env.local
+npm run setup:env
 ```
 
-Mở `.env.local` và điền thông tin Supabase:
+Lệnh này tạo `.env.local` từ file mẫu và không ghi đè cấu hình đã có. Mở `.env.local` và điền thông tin Supabase lấy trong **Supabase Dashboard → Project Settings → API**:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -45,6 +45,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
 ```
 
 Flask dùng URL và publishable key cùng access token của người dùng cho đăng nhập, xem tài liệu, thống kê và thao tác môn học/học liệu được RLS cho phép. Mọi bản clone dùng chung Supabase project này sẽ thấy cùng danh sách môn và PDF sau khi đăng nhập. Tài khoản, môn học và PDF nằm trong Supabase, không được đóng gói trong Git.
+
+Trên máy khác, chạy lại `npm run setup:env` rồi điền cùng URL và publishable key nếu cần dùng chung project. Không gửi hoặc commit `.env.local`; nếu cần chuyển các giá trị đã cấu hình, hãy dùng kênh lưu trữ/chia sẻ bí mật an toàn.
 
 ## Cấu hình Supabase
 
