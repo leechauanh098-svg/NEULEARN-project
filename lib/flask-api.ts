@@ -27,6 +27,7 @@ export type MaterialRow = {
   slide_count: number
   created_at: string
   uploaded_by: string
+  index_status?: "pending" | "ready" | "failed"
 }
 
 export type HistoryRow = {
@@ -179,6 +180,38 @@ export function getFlaskSignedUrl(accessToken: string, resourceId: string) {
   )
 }
 
+export type ChatCitation = {
+  id: number
+  page: number
+  quote: string
+}
+
+export type ChatHistoryItem = {
+  role: "assistant" | "student"
+  text: string
+}
+
+export function askFlaskMaterialChat(
+  accessToken: string,
+  materialId: string,
+  question: string,
+  history: ChatHistoryItem[],
+) {
+  return requestFlask<{ answer: string; citations: ChatCitation[] }>(
+    `/api/materials/${encodeURIComponent(materialId)}/chat`,
+    accessToken,
+    { method: "POST", json: { question, history } },
+  )
+}
+
+export function reindexFlaskMaterial(accessToken: string, materialId: string) {
+  return requestFlask<{ indexStatus: "pending" | "ready" | "failed" }>(
+    `/api/materials/${encodeURIComponent(materialId)}/reindex`,
+    accessToken,
+    { method: "POST" },
+  )
+}
+
 export function createFlaskCourse(
   accessToken: string,
   course: { name: string; category: string; description: string },
@@ -294,5 +327,6 @@ export function toMaterialResource(row: MaterialRow, course?: ManagedCourse): Le
     courseId: row.course_id,
     filePath: row.file_path,
     uploadedBy: row.uploaded_by,
+    indexStatus: row.index_status,
   }
 }

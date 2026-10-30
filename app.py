@@ -5,6 +5,7 @@ from admin_api import admin_api
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, request, send_from_directory
 from learning_api import learning_api
+from rag_api import rag_api
 from werkzeug.utils import safe_join
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -25,6 +26,11 @@ app.config.update(
 )
 app.register_blueprint(admin_api)
 app.register_blueprint(learning_api)
+app.config.update(
+    GEMINI_API_KEY=os.environ.get("GEMINI_API_KEY"),
+    GEMINI_MODEL=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash"),
+)
+app.register_blueprint(rag_api)
 app.config["MAX_CONTENT_LENGTH"] = 51 * 1024 * 1024
 
 
@@ -57,7 +63,7 @@ def add_security_headers(response):
 @app.errorhandler(413)
 def request_entity_too_large(_error):
     if request.path.startswith("/api/"):
-        return jsonify(error="Yêu cầu vượt quá dung lượng cho phép."), 413
+        return jsonify(error="YÃªu cáº§u vÆ°á»£t quÃ¡ dung lÆ°á»£ng cho phÃ©p."), 413
     return "Request too large", 413
 
 
@@ -87,7 +93,7 @@ def index():
 @app.get("/<path:requested_path>")
 def serve_export(requested_path):
     if requested_path == "api" or requested_path.startswith("api/"):
-        return jsonify(error="Không tìm thấy API Flask."), 404
+        return jsonify(error="KhÃ´ng tÃ¬m tháº¥y API Flask."), 404
 
     if not INDEX_FILE.is_file():
         abort(503, description="Frontend export is missing. Run `npm run build` first.")

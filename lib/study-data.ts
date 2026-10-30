@@ -24,6 +24,7 @@ export type LearningResource = {
   fileUrl?: string
   courseId?: string
   uploadedBy?: string
+  indexStatus?: "pending" | "ready" | "failed"
   teacher: string
   coverTone: CoverTone
 }

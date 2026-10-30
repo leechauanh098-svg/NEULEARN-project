@@ -10452,3 +10452,12 @@ button:not(.workspace-avatar):not(.home-topbar-avatar):not(.topbar-avatar):not(.
     width: 100%;
   }
 }
+
+/* Chat AI: citation theo trang tài liệu */
+.chat-answer-text { white-space: pre-wrap; }
+.chat-citations { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.chat-citation { display: grid; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid #cfdcf0; border-radius: 10px; background: #f4f8ff; color: #1f3a66; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
+.chat-citation:hover, .chat-citation:focus-visible { border-color: #2f6fbd; background: #eaf2ff; }
+.chat-citation strong { font-size: 12px; }
+.chat-citation span { color: #4a5b78; overflow-wrap: anywhere; }
+.chat-status { margin: 0; padding: 6px 4px; color: #5b6b86; font-size: 13px; }

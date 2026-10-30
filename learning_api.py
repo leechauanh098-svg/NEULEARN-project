@@ -7,10 +7,11 @@ from uuid import uuid4
 from flask import Blueprint, current_app, jsonify, request
 
 from admin_api import AdminApiError, _current_user, _supabase_request
+from rag_indexer import index_material
 
 learning_api = Blueprint("learning_api", __name__, url_prefix="/api")
 MAX_PDF_SIZE = 50 * 1024 * 1024
-MATERIAL_SELECT = "id,course_id,title,chapter,description,teacher_name,file_path,slide_count,created_at,uploaded_by"
+MATERIAL_SELECT = "id,course_id,title,chapter,description,teacher_name,file_path,slide_count,created_at,uploaded_by,index_status"
 COURSE_SELECT = "id,name,category,description,created_by"
 
 
@@ -107,11 +108,12 @@ def _storage_request(method, path, data=None, content_type="application/json"):
         return response_body.decode("utf-8", errors="replace")
 
 
-def _remove_storage_file(file_path):
+def _remove_storage_file(file_path, access_token=None):
     return _storage_request(
         "DELETE",
         "/storage/v1/object/lecture-materials",
         json.dumps({"prefixes": [file_path]}).encode("utf-8"),
+        access_token=access_token,
     )
 
 
@@ -281,6 +283,27 @@ def create_course():
         raise AdminApiError(502, "Không tạo được môn học.")
     return jsonify(course=rows[0]), 201
 
+@learning_api.post("/courses")
+def create_course():
+    user = _current_user()
+    _require_manager(user)
+    body = _json_body()
+    course = {
+        "name": _required_text(body, "name", "tên môn", 120),
+        "category": _required_text(body, "category", "nhóm môn", 80),
+        "description": str(body.get("description", "")).strip()[:500],
+        "created_by": user["id"],
+    }
+    rows = _rest_rows(
+        f"/rest/v1/courses?select={COURSE_SELECT}",
+        method="POST",
+        payload=course,
+        access_token=user["token"],
+    )
+    if not rows:
+        raise AdminApiError(502, "Không tạo được môn học.")
+    return jsonify(course=rows[0]), 201
+
 
 @learning_api.post("/courses/import")
 def import_courses():
@@ -427,7 +450,10 @@ def upload_material():
         raise error
     if not rows:
         raise AdminApiError(502, "Không lưu được thông tin PDF.")
-    return jsonify(material=rows[0]), 201
+    material = rows[0]
+    # Lập chỉ mục cho chat AI; thất bại không làm hỏng upload (có thể reindex sau).
+    material["index_status"] = index_material(material["id"], file_bytes)
+    return jsonify(material=material), 201
 
 
 @learning_api.patch("/materials/<material_id>")

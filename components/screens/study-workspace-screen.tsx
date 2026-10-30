@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react"
 import { ArrowLeft, ArrowRight, BookOpen, Code2, FileText, ListChecks, MessageCircle, Send, Workflow } from "lucide-react"
 import type { LearningResource } from "@/lib/study-data"
+import { askFlaskMaterialChat, type ChatCitation } from "@/lib/flask-api"
 import { BrandLogo } from "@/components/brand-logo"
 import { LearningPdfViewer } from "@/components/screens/learning-pdf-viewer"
 
@@ -15,6 +16,7 @@ type StudyWorkspaceScreenProps = {
   onLearnCode: () => void
   onQuestionAsked: (resourceId: string) => void
   onStudySeconds: (resourceId: string, seconds: number) => void
+  getAccessToken: () => Promise<string>
 }
 
 type ChatMessage = {
@@ -22,10 +24,17 @@ type ChatMessage = {
   role: "assistant" | "student"
   text: string
   kind?: "quiz" | "mindmap"
+  citations?: ChatCitation[]
 }
 
-export function StudyWorkspaceScreen({ resource, studentName, studentInitials, onBack, onHome, onLearnCode, onQuestionAsked, onStudySeconds }: StudyWorkspaceScreenProps) {
-  const page = 1
+export function StudyWorkspaceScreen({ resource, studentName, studentInitials, onBack, onHome, onLearnCode, onQuestionAsked, onStudySeconds, getAccessToken }: StudyWorkspaceScreenProps) {
+  const [page, setPage] = useState(1)
+  const [answering, setAnswering] = useState(false)
+  const canChat = resource.indexStatus === "ready"
+  const chatUnavailableReason =
+    resource.indexStatus === "pending" ? "Tài liệu đang được xử lý nên chưa thể hỏi đáp."
+      : resource.indexStatus === "failed" ? "Không đọc được nội dung tài liệu này (có thể là PDF ảnh scan). Giảng viên cần tải lại hoặc lập chỉ mục lại."
+        : "Tài liệu mẫu chưa hỗ trợ hỏi đáp AI."
   const [draft, setDraft] = useState("")
   const [sourceRatio, setSourceRatio] = useState(62)
   const [resizing, setResizing] = useState(false)
@@ -61,24 +70,35 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
     setMessages((current) => [...current, { ...message, id: `${Date.now()}-${Math.random()}` }])
   }
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const question = draft.trim()
-    if (!question) return
+    if (!question || answering || !canChat) return
+    const history = messages
+      .filter((message) => !message.kind && message.id !== "welcome")
+      .map((message) => ({ role: message.role, text: message.text }))
     onQuestionAsked(resource.id)
     addMessage({ role: "student", text: question })
-    addMessage({ role: "assistant", text: `Dựa trên tài liệu ${resource.chapter.toLowerCase()}, bạn hãy bắt đầu từ khái niệm chính rồi liên hệ với ví dụ trong bài. Đây là một câu hỏi hay — hãy thử chỉ rõ phần bạn muốn đào sâu thêm nhé.` })
     setDraft("")
+    setAnswering(true)
+    try {
+      const { answer, citations } = await askFlaskMaterialChat(await getAccessToken(), resource.id, question, history)
+      addMessage({ role: "assistant", text: answer, citations })
+    } catch (error) {
+      addMessage({ role: "assistant", text: error instanceof Error ? error.message : "Không thể trả lời lúc này. Vui lòng thử lại." })
+    } finally {
+      setAnswering(false)
+    }
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    sendMessage()
+    void sendMessage()
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
       event.preventDefault()
-      sendMessage()
+      void sendMessage()
     }
   }
 
@@ -141,7 +161,7 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
           </div>
           <div className="slide-viewer">
             <LearningPdfViewer
-              key={resource.fileUrl ?? "missing"}
+              key={`${resource.fileUrl ?? "missing"}-${page}`}
               fileUrl={resource.fileUrl ? `${resource.fileUrl}#page=${page}` : undefined}
               title={`${resource.title} · trang ${page}`}
             />
@@ -171,6 +191,7 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
           </div>
 
           <div className="chat-context"><span>Đang dựa trên <strong>{resource.title}</strong></span></div>
+          {!canChat && <p className="chat-status" role="status">{chatUnavailableReason}</p>}
 
           <div className="chat-messages" aria-live="polite" aria-label="Nội dung hội thoại">
             {messages.map((message) => (
@@ -182,10 +203,23 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
                     <div className="quiz-preview"><strong>{message.text}</strong><ol><li>TCP đảm nhiệm vai trò nào trong mô hình mạng?</li><li>Vì sao dữ liệu cần được chia thành các gói tin?</li><li>Địa chỉ IP giúp xác định điều gì?</li></ol><button type="button" onClick={() => addMessage({ role: "student", text: "Bắt đầu quiz" })}>Bắt đầu quiz <ArrowRight aria-hidden="true" /></button></div>
                   ) : message.kind === "mindmap" ? (
                     <div className="mindmap-preview"><strong>{message.text}</strong><div className="mindmap-center">{resource.course}</div><div className="mindmap-branches"><span>Khái niệm</span><span>Giao thức</span><span>Ứng dụng</span></div></div>
-                  ) : <p>{message.text}</p>}
+                  ) : <p className="chat-answer-text">{message.text}</p>}
+                  {message.citations && message.citations.length > 0 && (
+                    <ul className="chat-citations" aria-label="Nguồn trích dẫn trong tài liệu">
+                      {message.citations.map((citation) => (
+                        <li key={citation.id}>
+                          <button type="button" className="chat-citation" onClick={() => setPage(citation.page)} title="Mở trang này trong tài liệu">
+                            <strong>[{citation.id}] Trang {citation.page}</strong>
+                            <span>“{citation.quote}”</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </article>
             ))}
+            {answering && <p className="chat-status" role="status">Đang tìm trong tài liệu…</p>}
             <div ref={messagesEndRef} aria-hidden="true" />
           </div>
 
@@ -199,9 +233,9 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
 
             <form className="chat-composer" onSubmit={handleSubmit}>
               <MessageCircle className="composer-icon" aria-hidden="true" />
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Hỏi về nội dung trong slide..." rows={1} aria-label="Nhập câu hỏi về tài liệu" />
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Hỏi về nội dung trong slide..." rows={1} disabled={!canChat} aria-label="Nhập câu hỏi về tài liệu" />
               <span className="composer-hint">Shift + Enter xuống dòng</span>
-              <button type="submit" className="send-button" disabled={!draft.trim()} aria-label="Gửi câu hỏi"><Send aria-hidden="true" /></button>
+              <button type="submit" className="send-button" disabled={!draft.trim() || answering || !canChat} aria-label="Gửi câu hỏi"><Send aria-hidden="true" /></button>
             </form>
             <p className="assistant-disclaimer">Hãy đối chiếu nội dung trả lời với tài liệu gốc.</p>
           </div>

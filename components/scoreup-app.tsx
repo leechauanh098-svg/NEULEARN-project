@@ -991,6 +991,7 @@ export function ScoreUpApp() {
         }}
         onQuestionAsked={recordQuestion}
         onStudySeconds={recordStudySeconds}
+        getAccessToken={getAccessToken}
       />
     )
   }
