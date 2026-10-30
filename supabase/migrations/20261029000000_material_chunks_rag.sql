@@ -45,29 +45,34 @@ stable
 set search_path = ''
 as $$
   with q as (
-    select to_tsquery(
+    select pg_catalog.to_tsquery(
       'simple',
       nullif(
         (
-          select string_agg(distinct w, ' | ')
-          from regexp_split_to_table(
-            regexp_replace(lower(coalesce(p_query, '')), '[^[:alnum:]]+', ' ', 'g'),
+          select pg_catalog.string_agg(distinct words.word, ' | ')
+          from pg_catalog.regexp_split_to_table(
+            pg_catalog.regexp_replace(
+              pg_catalog.lower(coalesce(p_query, '')),
+              '[^[:alnum:]]+',
+              ' ',
+              'g'
+            ),
             '\s+'
-          ) as w
-          where length(w) > 1
+          ) as words(word)
+          where pg_catalog.length(words.word) > 1
         ),
         ''
       )
     ) as tsq
   )
   select c.id, c.page_number, c.chunk_index, c.content,
-         ts_rank(c.search_vector, q.tsq) as rank
+         pg_catalog.ts_rank(c.search_vector, q.tsq) as rank
   from public.material_chunks c, q
   where c.material_id = p_material_id
     and q.tsq is not null
     and c.search_vector @@ q.tsq
   order by rank desc, c.page_number, c.chunk_index
-  limit least(greatest(p_limit, 1), 20);
+  limit least(greatest(coalesce(p_limit, 6), 1), 20);
 $$;
 
 revoke all on function public.search_material_chunks(uuid, text, integer) from public, anon, authenticated;

@@ -1,7 +1,9 @@
 import unittest
-from unittest.mock import patch
+from io import BytesIO
+from unittest.mock import MagicMock, patch
 
 from app import app
+from learning_api import _storage_request
 
 
 class LearningApiTests(unittest.TestCase):
@@ -48,6 +50,7 @@ class LearningApiTests(unittest.TestCase):
             "/rest/v1/profiles?id=eq.student-id",
             method="PATCH",
             payload={"full_name": "New Name"},
+            access_token="access-token",
         )
 
     def test_profile_name_update_rejects_empty_name(self):
@@ -79,38 +82,39 @@ class LearningApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         supabase_request.assert_not_called()
 
-    def test_lecturer_creates_course_through_flask(self):
-        user = {
-            "id": "lecturer-id",
-            "token": "access-token",
-            "profile": {"role": "lecturer"},
-        }
-        created_course = {
-            "id": "course-id",
+def test_lecturer_creates_course_through_flask(self):
+    user = {
+        "id": "lecturer-id",
+        "token": "access-token",
+        "profile": {"role": "lecturer"},
+    }
+    created_course = {
+        "id": "course-id",
+        "name": "Toán",
+        "category": "Cơ sở",
+        "description": "",
+        "created_by": "lecturer-id",
+    }
+    with patch("learning_api._current_user", return_value=user):
+        with patch("learning_api._rest_rows", return_value=[created_course]) as supabase_request:
+            response = self.client.post(
+                "/api/courses",
+                json={"name": " Toán ", "category": "Cơ sở", "description": ""},
+            )
+
+    self.assertEqual(response.status_code, 201)
+    self.assertEqual(response.get_json(), {"course": created_course})
+    supabase_request.assert_called_once_with(
+        "/rest/v1/courses?select=id,name,category,description,created_by",
+        method="POST",
+        payload={
             "name": "Toán",
             "category": "Cơ sở",
             "description": "",
             "created_by": "lecturer-id",
-        }
-        with patch("learning_api._current_user", return_value=user):
-            with patch("learning_api._rest_rows", return_value=[created_course]) as supabase_request:
-                response = self.client.post(
-                    "/api/courses",
-                    json={"name": " Toán ", "category": "Cơ sở", "description": ""},
-                )
-
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.get_json(), {"course": created_course})
-        supabase_request.assert_called_once_with(
-            "/rest/v1/courses?select=id,name,category,description,created_by",
-            method="POST",
-            payload={
-                "name": "Toán",
-                "category": "Cơ sở",
-                "description": "",
-                "created_by": "lecturer-id",
-            },
-        )
+        },
+        access_token="access-token",
+    )
 
     def test_learning_endpoint_returns_all_courses(self):
         user = {
