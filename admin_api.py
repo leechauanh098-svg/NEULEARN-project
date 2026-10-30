@@ -19,17 +19,17 @@ class AdminApiError(Exception):
         self.upstream_status = upstream_status
 
 
-def _supabase_config():
+def _supabase_config(require_service_role=True):
     url = current_app.config.get("SUPABASE_URL")
     service_key = current_app.config.get("SUPABASE_SERVICE_ROLE_KEY")
     anon_key = current_app.config.get("SUPABASE_ANON_KEY")
-    if not url or not service_key or not anon_key:
-        raise AdminApiError(503, "Flask chưa được cấu hình đầy đủ thông tin Supabase cho quản trị.")
+    if not url or not anon_key or (require_service_role and not service_key):
+        raise AdminApiError(503, "Flask chưa được cấu hình đầy đủ thông tin Supabase cho thao tác này.")
     return url.rstrip("/"), service_key, anon_key
 
 
 def _supabase_request(method, path, payload=None, access_token=None):
-    url, service_key, anon_key = _supabase_config()
+    url, service_key, anon_key = _supabase_config(require_service_role=not access_token)
     key = anon_key if access_token else service_key
     headers = {
         "apikey": key,
@@ -90,6 +90,7 @@ def _current_user():
     profiles = _supabase_request(
         "GET",
         f"/rest/v1/profiles?select=id,email,full_name,role&id=eq.{profile_filter}",
+        access_token=token.strip(),
     )
     if not profiles:
         raise AdminApiError(403, "Tài khoản chưa có hồ sơ trong hệ thống.")

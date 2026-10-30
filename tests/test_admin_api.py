@@ -1,6 +1,7 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from admin_api import _supabase_request
 from app import app
 
 
@@ -37,6 +38,24 @@ class AdminApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         supabase_request.assert_not_called()
+
+    def test_authenticated_supabase_request_does_not_require_service_role_key(self):
+        app.config["SUPABASE_SERVICE_ROLE_KEY"] = None
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b"[]"
+
+        with app.app_context():
+            with patch("admin_api.urlopen", return_value=response) as urlopen:
+                result = _supabase_request(
+                    "GET",
+                    "/rest/v1/courses",
+                    access_token="user-access-token",
+                )
+
+        self.assertEqual(result, [])
+        upstream_request = urlopen.call_args.args[0]
+        self.assertEqual(upstream_request.get_header("Apikey"), "test-anon-key")
+        self.assertEqual(upstream_request.get_header("Authorization"), "Bearer user-access-token")
 
     def test_admin_users_page_is_served_by_flask(self):
         response = self.client.get("/admin/users")
