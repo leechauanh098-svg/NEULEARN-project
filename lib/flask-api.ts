@@ -191,6 +191,42 @@ export type ChatHistoryItem = {
   text: string
 }
 
+export type QuizChoice = {
+  id: "A" | "B" | "C" | "D"
+  text: string
+}
+
+export type QuizQuestion = {
+  id: number
+  prompt: string
+  choices: QuizChoice[]
+  correctId: QuizChoice["id"]
+  explanation: string
+  page: number
+}
+
+export type MaterialQuiz = {
+  id: string
+  title: string
+  createdAt: string
+  questions: QuizQuestion[]
+}
+
+export function listFlaskMaterialQuizzes(accessToken: string, materialId: string) {
+  return requestFlask<{ quizzes: MaterialQuiz[] }>(
+    `/api/materials/${encodeURIComponent(materialId)}/quizzes`,
+    accessToken,
+  )
+}
+
+export function createFlaskMaterialQuiz(accessToken: string, materialId: string) {
+  return requestFlask<{ quiz: MaterialQuiz }>(
+    `/api/materials/${encodeURIComponent(materialId)}/quizzes`,
+    accessToken,
+    { method: "POST", json: {} },
+  )
+}
+
 export function askFlaskMaterialChat(
   accessToken: string,
   materialId: string,

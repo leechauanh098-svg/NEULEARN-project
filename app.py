@@ -1,7 +1,8 @@
-import os
+﻿import os
 from pathlib import Path
 
 from admin_api import admin_api
+from coding_api import coding_api
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, request, send_from_directory
 from learning_api import learning_api
@@ -9,7 +10,7 @@ from rag_api import rag_api
 from werkzeug.utils import safe_join
 
 ROOT_DIR = Path(__file__).resolve().parent
-load_dotenv(ROOT_DIR / ".env.local")
+load_dotenv(ROOT_DIR / ".env.local", encoding="utf-8-sig")
 
 EXPORT_DIR = ROOT_DIR / "out"
 INDEX_FILE = EXPORT_DIR / "index.html"
@@ -25,6 +26,7 @@ app.config.update(
     SUPABASE_SERVICE_ROLE_KEY=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
 )
 app.register_blueprint(admin_api)
+app.register_blueprint(coding_api)
 app.register_blueprint(learning_api)
 app.config.update(
     GEMINI_API_KEY=os.environ.get("GEMINI_API_KEY"),
@@ -82,6 +84,7 @@ def health_check():
 @app.get("/admin/users")
 @app.get("/study")
 @app.get("/code")
+@app.get("/coding-practice")
 @app.get("/login")
 @app.get("/reset-password")
 def index():

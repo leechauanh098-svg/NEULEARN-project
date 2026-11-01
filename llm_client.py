@@ -1,6 +1,7 @@
 """Bá»c lá»i gá»i Gemini API (generateContent) báº±ng thÆ° viá»‡n chuáº©n."""
 
 import json
+import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -11,7 +12,7 @@ from admin_api import AdminApiError
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
-def generate_answer(system_prompt, turns):
+def generate_answer(system_prompt, turns, generation_config=None, timeout=45):
     """turns: list[{"role": "user"|"model", "text": str}]. Tráº£ vá» text cÃ¢u tráº£ lá»i."""
     api_key = current_app.config.get("GEMINI_API_KEY")
     if not api_key:
@@ -20,7 +21,7 @@ def generate_answer(system_prompt, turns):
     payload = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": turn["role"], "parts": [{"text": turn["text"]}]} for turn in turns],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1500},
+        "generationConfig": generation_config or {"temperature": 0.2, "maxOutputTokens": 1500},
     }
     remote_request = Request(
         GEMINI_ENDPOINT.format(model=model),
@@ -29,7 +30,7 @@ def generate_answer(system_prompt, turns):
         method="POST",
     )
     try:
-        with urlopen(remote_request, timeout=45) as response:
+        with urlopen(remote_request, timeout=timeout) as response:
             result = json.loads(response.read())
     except HTTPError as error:
         current_app.logger.error("Gemini API error %s: %s", error.code, error.read()[:300])
@@ -45,3 +46,26 @@ def generate_answer(system_prompt, turns):
     if not text.strip():
         raise AdminApiError(502, "Trá»£ lÃ½ AI khÃ´ng tráº£ vá» ná»™i dung.")
     return text.strip()
+
+
+def generate_json(system_prompt, turns, schema, timeout=90):
+    """Gọi Gemini và parse JSON. schema là responseSchema của generateContent."""
+    text = generate_answer(
+        system_prompt,
+        turns,
+        generation_config={
+            "temperature": 0.35,
+            "maxOutputTokens": 4096,
+            "responseMimeType": "application/json",
+            "responseSchema": schema,
+        },
+        timeout=timeout,
+    )
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE | re.DOTALL).strip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as error:
+        raise AdminApiError(502, "Trợ lý AI không trả về JSON hợp lệ.") from error
+    return parsed

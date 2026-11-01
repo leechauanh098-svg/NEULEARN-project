@@ -1,0 +1,86 @@
+[
+  {
+    "id": "java-variables-my-profile",
+    "course": "Lập trình Java",
+    "title": "Lập trình Java: Biến (Variables)",
+    "subtitle": "Ôn tập · 6 phút",
+    "fileName": "MyProfile.java",
+    "lesson": "### Khởi tạo và gán giá trị cho biến\n\nViệc tạo và gán giá trị cho **biến (variables)** là một khái niệm quan trọng giúp chúng ta lưu trữ và quản lý dữ liệu trong chương trình.\n\nTrong bài học này, bạn sẽ thực hành khai báo và in các **kiểu dữ liệu (data types)** khác nhau trong Java:\n\n**Các kiểu dữ liệu chính bao gồm:**\n- `int`: dùng để lưu trữ các số nguyên (ví dụ: tuổi, số lượng).\n- `double`: dùng để lưu các số thực có phần thập phân (ví dụ: điểm số, tiền lương).\n- `boolean`: dùng để lưu hai giá trị logic `true` (đúng) hoặc `false` (sai).\n- `char`: dùng để lưu một ký tự đơn, đặt trong dấu nháy đơn `'a'`.\n- `String`: dùng để lưu một chuỗi ký tự, đặt trong dấu nháy kép `\"...\"`.\n- **Kiểu dữ liệu tĩnh (Static typing)**: tính năng an toàn của Java, yêu cầu biến phải được định rõ kiểu dữ liệu khi khai báo.\n- **Quy tắc đặt tên biến (Naming conventions)**: tuân theo quy tắc camelCase (ví dụ: `desiredSalary`).\n\nHãy thực hành khai báo biến và gán giá trị theo các yêu cầu bên dưới để nắm vững nền tảng Java nhé!",
+    "starterCode": "public class MyProfile {\n\tpublic static void main(String[] args) {\n\n\t}\n}",
+    "solutionCode": "public class MyProfile {\n\tpublic static void main(String[] args) {\n\t\tString name = \"Nguyễn Văn A\";\n\t\tint age = 20;\n\t\tdouble desiredSalary = 2000.50;\n\n\t\tSystem.out.println(\"Tên: \" + name);\n\t\tSystem.out.println(\"Tuổi: \" + age);\n\t\tSystem.out.println(\"Mức lương mong muốn: \" + desiredSalary);\n\t}\n}",
+    "solutionExplanation": "1. Khai báo biến `name` kiểu `String`: `String name = \"Tên của bạn\";`\n2. Khai báo biến `age` kiểu `int`: `int age = 20;`\n3. Khai báo biến `desiredSalary` kiểu `double`: `double desiredSalary = 2000.50;`\n4. Dùng lệnh `System.out.println(...)` để in các biến ra màn hình console.",
+    "defaultOutput": "Tên: Nguyễn Văn A\nTuổi: 20\nMức lương mong muốn: 2000.5",
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Nhiệm vụ 1",
+        "text": "File MyProfile.java chứa class đại diện cho hồ sơ xin việc của bạn. Trong phương thức main(), hãy tạo một biến tên là name để lưu tên của bạn dưới dạng chuỗi ký tự (String).",
+        "hint": "Khai báo biến chuỗi: String name = \"Tên_Của_Bạn\";",
+        "validation": {
+          "type": "regex",
+          "pattern": "String\\s+name\\s*=\\s*\"[^\"]*\"\\s*;",
+          "errorMessage": "Chưa tìm thấy khai báo biến 'name' kiểu String (ví dụ: String name = \"Nguyễn Văn A\";)"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Nhiệm vụ 2",
+        "text": "Tạo một biến tên là age để lưu số tuổi của bạn dưới dạng một số nguyên (int).",
+        "hint": "Khai báo biến số nguyên: int age = 20;",
+        "validation": {
+          "type": "regex",
+          "pattern": "int\\s+age\\s*=\\s*\\d+\\s*;",
+          "errorMessage": "Chưa tìm thấy khai báo biến 'age' kiểu int (ví dụ: int age = 20;)"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Nhiệm vụ 3",
+        "text": "Tạo một biến tên là desiredSalary để lưu mức lương mong muốn mỗi năm của bạn với độ chính xác đến hai chữ số thập phân (double).",
+        "hint": "Khai báo biến số thực: double desiredSalary = 50000.00;",
+        "validation": {
+          "type": "regex",
+          "pattern": "double\\s+desiredSalary\\s*=\\s*\\d+(\\.\\d+)?\\s*;",
+          "errorMessage": "Chưa tìm thấy khai báo biến 'desiredSalary' kiểu double (ví dụ: double desiredSalary = 50000.00;)"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Nhiệm vụ 4",
+        "text": "In thông tin hồ sơ: Sử dụng lệnh System.out.println() để in các thông tin name, age, hoặc desiredSalary ra màn hình console.",
+        "hint": "Dùng lệnh in: System.out.println(name); hoặc System.out.println(\"Tên: \" + name);",
+        "validation": {
+          "type": "regex",
+          "pattern": "System\\.out\\.println\\s*\\([\\s\\S]*?\\)\\s*;",
+          "errorMessage": "Cần ít nhất một câu lệnh System.out.println(...) để in thông tin ra màn hình."
+        }
+      }
+    ]
+  },
+  {
+    "id": "java-variables-guessing-game",
+    "course": "Lập trình Java",
+    "title": "Biến & Phép toán số học",
+    "subtitle": "Ôn tập · 4 phút",
+    "fileName": "GuessingGame.java",
+    "lesson": "### Phép toán số học trong Java\n\nTrong bài học này, chúng ta sẽ học cách thao tác với các biến thuộc nhiều **kiểu dữ liệu** khác nhau.\n\nJava cung cấp các toán tử số học cơ bản như `+`, `-`, `*`, `/`, và `%` để tính toán giá trị một cách linh hoạt.",
+    "starterCode": "public class GuessingGame {\n\tpublic static void main(String[] args) {\n\t\tint mystery1 = 8 + 6;\n\t\tint mystery2 = 8 - 6;\n\t}\n}",
+    "solutionCode": "public class GuessingGame {\n\tpublic static void main(String[] args) {\n\t\tint mystery1 = 8 + 6;\n\t\tint mystery2 = 8 - 6;\n\t\tSystem.out.println(mystery2);\n\t}\n}",
+    "solutionExplanation": "Biến `mystery1` giữ giá trị `8 + 6 = 14`. Biến `mystery2` giữ giá trị `8 - 6 = 2`. Để in biến có giá trị bằng 2, ta in biến `mystery2`:\n```java\nSystem.out.println(mystery2);\n```",
+    "defaultOutput": "2",
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Nhiệm vụ 1",
+        "text": "Trong file GuessingGame.java, chương trình đã định nghĩa sẵn hai số nguyên mystery1 và mystery2. Hãy sử dụng lệnh System.out.println() để in ra biến đang giữ giá trị bằng 2.",
+        "hint": "mystery2 = 8 - 6 = 2. Hãy in biến mystery2: System.out.println(mystery2);",
+        "validation": {
+          "type": "regex",
+          "pattern": "System\\.out\\.println\\s*\\(\\s*mystery2\\s*\\)\\s*;",
+          "forbiddenPattern": "System\\.out\\.println\\s*\\(\\s*2\\s*\\)",
+          "errorMessage": "Hãy in biến mystery2 bằng System.out.println(mystery2); thay vì in trực tiếp số 2!"
+        }
+      }
+    ]
+  }
+]

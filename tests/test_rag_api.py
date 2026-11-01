@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pymupdf as fitz
 
 from app import app
-from rag_api import _clean_history, build_citations
+from rag_api import _build_quiz_context, _clean_history, build_citations, normalize_quiz
 from rag_indexer import chunk_pages, extract_pages
 
 USER = {"id": "u1", "token": "t", "profile": {"id": "u1", "role": "student", "email": "", "full_name": ""}}
@@ -63,12 +63,15 @@ class ChatEndpointTests(unittest.TestCase):
     def test_requires_login(self):
         self.assertEqual(self.client.post("/api/materials/m1/chat", json={"question": "a"}).status_code, 401)
 
-    def test_not_indexed_material_is_rejected(self):
+    def test_pending_material_is_indexed_before_chat(self):
         with patch("rag_api._current_user", return_value=USER), patch(
-            "rag_api._owned_row", return_value={"id": "m1", "title": "T", "index_status": "pending"}
-        ):
+            "rag_api._owned_row",
+            return_value={"id": "m1", "title": "T", "file_path": "m1.pdf", "index_status": "pending", "index_error": ""},
+        ), patch("rag_api._download_pdf", return_value=b"%PDF"), patch(
+            "rag_api.index_material", return_value="ready"
+        ), patch("rag_api._supabase_request", return_value=[]):
             response = self.client.post("/api/materials/m1/chat", json={"question": "a"})
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 200)
 
     def test_answer_includes_citations(self):
         chunks = [{"page_number": 5, "content": "Biáº¿n lÃ  vÃ¹ng nhá»›"}]
@@ -90,6 +93,34 @@ class ChatEndpointTests(unittest.TestCase):
             response = self.client.post("/api/materials/m1/chat", json={"question": "abc"})
         self.assertEqual(response.get_json()["citations"], [])
         llm.assert_not_called()
+
+
+class QuizTests(unittest.TestCase):
+    def test_build_quiz_context_spreads_across_whole_pdf(self):
+        chunks = [{"page_number": p, "content": f"Trang {p} noi dung quan trong"} for p in range(1, 21)]
+        context = _build_quiz_context(chunks, target_count=5)
+        self.assertIn("TRANG 1", context)
+        self.assertIn("TRANG 20", context)
+        self.assertEqual(context.count("[MỤC "), 5)
+
+    def test_normalize_quiz_requires_exactly_five_questions(self):
+        raw_quiz = {
+            "title": "Kiem tra 5 cau",
+            "questions": [
+                {
+                    "prompt": f"Cau hoi {i}?",
+                    "choices": ["A", "B", "C", "D"],
+                    "correctIndex": 0,
+                    "explanation": "Dung vi...",
+                    "page": i * 2,
+                }
+                for i in range(1, 6)
+            ],
+        }
+        normalized = normalize_quiz(raw_quiz)
+        self.assertEqual(len(normalized["questions"]), 5)
+        self.assertEqual(normalized["questions"][0]["correctId"], "A")
+        self.assertEqual(normalized["questions"][4]["page"], 10)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,21 @@ export type LearningResource = {
 
 export const learningResources: LearningResource[] = [
   {
+    id: "java-variables",
+    title: "Learn Java: Variables & Data Types",
+    course: "Lập trình Java",
+    category: "Lập trình",
+    hasCode: true,
+    chapter: "BÀI 01",
+    description: "Thực hành khai báo biến, các kiểu dữ liệu int, double, boolean, String trong Java.",
+    slides: 20,
+    duration: "40 phút",
+    updated: "Cập nhật 31/10/2026",
+    progress: 0,
+    teacher: "TS. Hoàng Nam",
+    coverTone: "gold",
+  },
+  {
     id: "networking-tcp-ip",
     title: "Giao thức TCP/IP và mạng Internet",
     course: "Mạng máy tính",

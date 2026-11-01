@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useCallback, useEffect, useState } from "react"
 import type { LearningResource, ManagedCourse } from "@/lib/study-data"
@@ -15,6 +15,7 @@ import { StudyStatsScreen } from "@/components/screens/study-stats-screen"
 import { StudyGuideScreen } from "@/components/screens/study-guide-screen"
 import { StudyWorkspaceScreen } from "@/components/screens/study-workspace-screen"
 import { ResetPasswordScreen } from "@/components/screens/reset-password-screen"
+import { CodingPracticeScreen } from "@/components/screens/coding-practice/coding-practice-screen"
 import {
   TeacherDashboardScreen,
   type BulkUploadMaterialInput,
@@ -52,7 +53,7 @@ import {
 } from "@/lib/flask-api"
 import type { User } from "@supabase/supabase-js"
 
-type Screen = "login" | "forgot" | "reset-password" | "home" | "course" | "my-documents" | "study-stats" | "guide" | "study" | "code" | "teacher" | "admin-users" | "account"
+type Screen = "login" | "forgot" | "reset-password" | "home" | "course" | "my-documents" | "study-stats" | "guide" | "study" | "code" | "coding-practice" | "teacher" | "admin-users" | "account"
 type StudyReturnScreen = "home" | "course" | "my-documents"
 type CodeReturnScreen = StudyReturnScreen | "study"
 type PersistedScreen = Exclude<Screen, "login" | "forgot" | "reset-password">
@@ -93,6 +94,7 @@ function readNavigationFromLocation(): NavigationSnapshot | null {
     "/account": "account",
     "/study": "study",
     "/code": "code",
+    "/coding-practice": "coding-practice",
   }
   const screen = screenByPath[path]
   if (!screen) return null
@@ -130,13 +132,14 @@ function getNavigationPath(snapshot: NavigationSnapshot) {
     guide: "/guide",
     study: "/study",
     code: "/code",
+    "coding-practice": "/coding-practice",
     teacher: "/teacher",
     "admin-users": "/admin/users",
     account: "/account",
   }
   url.pathname = paths[snapshot.screen]
   if (snapshot.screen === "course") url.searchParams.set("course", snapshot.selectedCourse)
-  if (snapshot.screen === "study" || snapshot.screen === "code") {
+  if (snapshot.screen === "study" || snapshot.screen === "code" || snapshot.screen === "coding-practice") {
     url.searchParams.set("resource", snapshot.selectedResourceId)
     url.searchParams.set("return", snapshot.studyReturnScreen)
     url.searchParams.set("codeReturn", snapshot.codeReturnScreen)
@@ -341,7 +344,7 @@ export function ScoreUpApp() {
     setStudyReturnScreen(snapshot.studyReturnScreen)
     setCodeReturnScreen(snapshot.codeReturnScreen)
 
-    if (snapshot.screen === "study" || snapshot.screen === "code") {
+    if (snapshot.screen === "study" || snapshot.screen === "code" || snapshot.screen === "coding-practice") {
       if (!snapshot.selectedResourceId) {
         setPendingNavigationRestore(null)
         setScreen(snapshot.studyReturnScreen)
@@ -974,6 +977,18 @@ export function ScoreUpApp() {
     )
   }
 
+  if (screen === "coding-practice") {
+    return (
+      <CodingPracticeScreen
+        key={selectedResource.id}
+        resource={selectedResource}
+        onBack={() => setScreen(codeReturnScreen)}
+        onHome={navigateHome}
+        getAccessToken={getAccessToken}
+      />
+    )
+  }
+
   if (screen === "study") {
     return (
       <StudyWorkspaceScreen
@@ -983,11 +998,9 @@ export function ScoreUpApp() {
         studentInitials={studentInitials}
         onBack={() => setScreen(studyReturnScreen)}
         onHome={navigateHome}
-        onLearnCode={() => {
-          if (selectedResource.category.trim().toLocaleLowerCase("vi") === "lập trình") {
-            setCodeReturnScreen("study")
-            setScreen("code")
-          }
+        onPracticeCode={() => {
+          setCodeReturnScreen("study")
+          setScreen("coding-practice")
         }}
         onQuestionAsked={recordQuestion}
         onStudySeconds={recordStudySeconds}

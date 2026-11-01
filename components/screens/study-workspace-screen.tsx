@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react"
-import { ArrowLeft, ArrowRight, BookOpen, Code2, FileText, ListChecks, MessageCircle, Send, Workflow } from "lucide-react"
+import { ArrowLeft, BookOpen, Code2, FileText, ListChecks, MessageCircle, Send } from "lucide-react"
 import type { LearningResource } from "@/lib/study-data"
-import { askFlaskMaterialChat, type ChatCitation } from "@/lib/flask-api"
+import { askFlaskMaterialChat, createFlaskMaterialQuiz, listFlaskMaterialQuizzes, type ChatCitation, type MaterialQuiz, type QuizChoice } from "@/lib/flask-api"
 import { BrandLogo } from "@/components/brand-logo"
 import { LearningPdfViewer } from "@/components/screens/learning-pdf-viewer"
+import { QuizHistoryPane, StudyQuizPlayer } from "@/components/screens/study-quiz-pane"
 
 type StudyWorkspaceScreenProps = {
   resource: LearningResource
@@ -13,7 +14,7 @@ type StudyWorkspaceScreenProps = {
   studentInitials: string
   onBack: () => void
   onHome: () => void
-  onLearnCode: () => void
+  onPracticeCode: () => void
   onQuestionAsked: (resourceId: string) => void
   onStudySeconds: (resourceId: string, seconds: number) => void
   getAccessToken: () => Promise<string>
@@ -23,26 +24,35 @@ type ChatMessage = {
   id: string
   role: "assistant" | "student"
   text: string
-  kind?: "quiz" | "mindmap"
   citations?: ChatCitation[]
 }
 
-export function StudyWorkspaceScreen({ resource, studentName, studentInitials, onBack, onHome, onLearnCode, onQuestionAsked, onStudySeconds, getAccessToken }: StudyWorkspaceScreenProps) {
+export function StudyWorkspaceScreen({ resource, studentName, studentInitials, onBack, onHome, onPracticeCode, onQuestionAsked, onStudySeconds, getAccessToken }: StudyWorkspaceScreenProps) {
   const [page, setPage] = useState(1)
   const [answering, setAnswering] = useState(false)
+  const [creatingQuiz, setCreatingQuiz] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [quizzes, setQuizzes] = useState<MaterialQuiz[]>([])
+  const [activeQuiz, setActiveQuiz] = useState<MaterialQuiz | null>(null)
+  const [questionIndex, setQuestionIndex] = useState(0)
+  const [selectedId, setSelectedId] = useState<QuizChoice["id"] | null>(null)
+  const [finished, setFinished] = useState(false)
+  const [correctCount, setCorrectCount] = useState(0)
   const canChat = resource.indexStatus === "ready"
   const chatUnavailableReason =
-    resource.indexStatus === "pending" ? "Tài liệu đang được xử lý nên chưa thể hỏi đáp."
+    resource.indexStatus === "pending" ? "Tài liệu đang được xử lý nên chưa thể hỏi đáp hoặc tạo quiz."
       : resource.indexStatus === "failed" ? "Không đọc được nội dung tài liệu này (có thể là PDF ảnh scan). Giảng viên cần tải lại hoặc lập chỉ mục lại."
         : "Tài liệu mẫu chưa hỗ trợ hỏi đáp AI."
   const [draft, setDraft] = useState("")
-  const [sourceRatio, setSourceRatio] = useState(62)
+  const [sourceRatio, setSourceRatio] = useState(54)
   const [resizing, setResizing] = useState(false)
   const workspaceRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: "welcome", role: "assistant", text: `Chào ${studentName}! Mình đang đồng hành cùng bạn trong tài liệu “${resource.title}”. Bạn có thể hỏi về một khái niệm, nhờ tóm tắt nội dung hoặc tạo hoạt động ôn tập.` },
   ])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatRatio = (100 - sourceRatio) * 3 / 4
+  const historyRatio = (100 - sourceRatio) / 4
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
@@ -66,15 +76,74 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
     }
   }, [onStudySeconds, resource.id])
 
+  useEffect(() => {
+    let cancelled = false
+    const loadHistory = async () => {
+      setHistoryLoading(true)
+      try {
+        const { quizzes: rows } = await listFlaskMaterialQuizzes(await getAccessToken(), resource.id)
+        if (!cancelled) setQuizzes(rows)
+      } catch {
+        if (!cancelled) setQuizzes([])
+      } finally {
+        if (!cancelled) setHistoryLoading(false)
+      }
+    }
+    void loadHistory()
+    return () => {
+      cancelled = true
+    }
+  }, [getAccessToken, resource.id])
+
   const addMessage = (message: Omit<ChatMessage, "id">) => {
     setMessages((current) => [...current, { ...message, id: `${Date.now()}-${Math.random()}` }])
+  }
+
+  const openQuiz = (quiz: MaterialQuiz) => {
+    setActiveQuiz(quiz)
+    setQuestionIndex(0)
+    setSelectedId(null)
+    setFinished(false)
+    setCorrectCount(0)
+  }
+
+  const createQuiz = async () => {
+    if (!canChat || creatingQuiz) return
+    setCreatingQuiz(true)
+    try {
+      const { quiz } = await createFlaskMaterialQuiz(await getAccessToken(), resource.id)
+      setQuizzes((current) => [quiz, ...current])
+      openQuiz(quiz)
+    } catch (error) {
+      addMessage({ role: "assistant", text: error instanceof Error ? error.message : "Không soạn được quiz lúc này. Vui lòng thử lại." })
+      setActiveQuiz(null)
+    } finally {
+      setCreatingQuiz(false)
+    }
+  }
+
+  const selectChoice = (choiceId: QuizChoice["id"]) => {
+    if (selectedId || !activeQuiz) return
+    const question = activeQuiz.questions[questionIndex]
+    setSelectedId(choiceId)
+    if (question && choiceId === question.correctId) setCorrectCount((count) => count + 1)
+  }
+
+  const goNextQuestion = () => {
+    if (!activeQuiz || selectedId === null) return
+    if (questionIndex >= activeQuiz.questions.length - 1) {
+      setFinished(true)
+      return
+    }
+    setQuestionIndex((current) => current + 1)
+    setSelectedId(null)
   }
 
   const sendMessage = async () => {
     const question = draft.trim()
     if (!question || answering || !canChat) return
     const history = messages
-      .filter((message) => !message.kind && message.id !== "welcome")
+      .filter((message) => message.id !== "welcome")
       .map((message) => ({ role: message.role, text: message.text }))
     onQuestionAsked(resource.id)
     addMessage({ role: "student", text: question })
@@ -101,9 +170,6 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
       void sendMessage()
     }
   }
-
-  const createQuiz = () => addMessage({ role: "assistant", kind: "quiz", text: "Quiz nhanh · 3 câu từ tài liệu" })
-  const createMindMap = () => addMessage({ role: "assistant", kind: "mindmap", text: "Sơ đồ tư duy · nội dung chính" })
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -140,11 +206,10 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
           <button className="workspace-back" type="button" onClick={onBack} aria-label="Quay lại thư viện"><ArrowLeft aria-hidden="true" /></button>
           <BrandLogo compact onClick={onHome} />
           <span className="workspace-title-divider" />
-          <div className="workspace-document-title"><span>Đang học</span><strong>{resource.title}</strong></div>
+          <div className="workspace-document-title"><strong>{resource.title}</strong></div>
         </div>
         <div className="workspace-top-actions">
           <span className="source-count"><FileText aria-hidden="true" /> 1 nguồn</span>
-          {resource.hasCode && <button className="workspace-code-button" type="button" onClick={onLearnCode}><Code2 aria-hidden="true" /> Học code <ArrowRight aria-hidden="true" /></button>}
           <button className="workspace-avatar" type="button" aria-label={`Tài khoản ${studentName}`}>{studentInitials}</button>
         </div>
       </header>
@@ -152,7 +217,7 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
       <div
         className={`workspace-layout${resizing ? " is-resizing" : ""}`}
         ref={workspaceRef}
-        style={{ gridTemplateColumns: `minmax(0, ${sourceRatio}fr) 8px minmax(0, ${100 - sourceRatio}fr)` }}
+        style={{ gridTemplateColumns: `minmax(0, ${sourceRatio}fr) 8px minmax(0, ${chatRatio}fr) minmax(0, ${historyRatio}fr)` }}
       >
         <section className="source-pane" aria-labelledby="source-title">
           <div className="pane-heading source-pane-heading">
@@ -166,7 +231,6 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
               title={`${resource.title} · trang ${page}`}
             />
           </div>
-
         </section>
 
         <div
@@ -185,61 +249,92 @@ export function StudyWorkspaceScreen({ resource, studentName, studentInitials, o
           onKeyDown={resizeWithKeyboard}
         ><span /></div>
 
-        <section className="chat-pane" aria-labelledby="chat-title">
+        <section className="chat-pane quiz-pane" aria-labelledby="chat-title">
           <div className="pane-heading chat-pane-heading">
-            <h2 id="chat-title">Hỏi đáp tài liệu</h2>
+            <h2 id="chat-title">{activeQuiz ? "Quiz ôn tập" : "Hỏi đáp tài liệu"}</h2>
+            {activeQuiz && (
+              <button
+                type="button"
+                className="quiz-exit-button"
+                onClick={() => setActiveQuiz(null)}
+                title="Quay lại hỏi đáp tài liệu"
+              >
+                Trở về hỏi đáp
+              </button>
+            )}
           </div>
 
-          <div className="chat-context"><span>Đang dựa trên <strong>{resource.title}</strong></span></div>
           {!canChat && <p className="chat-status" role="status">{chatUnavailableReason}</p>}
 
-          <div className="chat-messages" aria-live="polite" aria-label="Nội dung hội thoại">
-            {messages.map((message) => (
-              <article className={`chat-message ${message.role === "student" ? "student-message" : "assistant-message"}`} key={message.id}>
-                {message.role === "assistant" && <span className="message-avatar"><BookOpen aria-hidden="true" /></span>}
-                <div className="message-content">
-                  {message.role === "assistant" && <span className="message-author">NEULEARN <span>·</span> theo tài liệu</span>}
-                  {message.kind === "quiz" ? (
-                    <div className="quiz-preview"><strong>{message.text}</strong><ol><li>TCP đảm nhiệm vai trò nào trong mô hình mạng?</li><li>Vì sao dữ liệu cần được chia thành các gói tin?</li><li>Địa chỉ IP giúp xác định điều gì?</li></ol><button type="button" onClick={() => addMessage({ role: "student", text: "Bắt đầu quiz" })}>Bắt đầu quiz <ArrowRight aria-hidden="true" /></button></div>
-                  ) : message.kind === "mindmap" ? (
-                    <div className="mindmap-preview"><strong>{message.text}</strong><div className="mindmap-center">{resource.course}</div><div className="mindmap-branches"><span>Khái niệm</span><span>Giao thức</span><span>Ứng dụng</span></div></div>
-                  ) : <p className="chat-answer-text">{message.text}</p>}
-                  {message.citations && message.citations.length > 0 && (
-                    <ul className="chat-citations" aria-label="Nguồn trích dẫn trong tài liệu">
-                      {message.citations.map((citation) => (
-                        <li key={citation.id}>
-                          <button type="button" className="chat-citation" onClick={() => setPage(citation.page)} title="Mở trang này trong tài liệu">
-                            <strong>[{citation.id}] Trang {citation.page}</strong>
-                            <span>“{citation.quote}”</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </article>
-            ))}
-            {answering && <p className="chat-status" role="status">Đang tìm trong tài liệu…</p>}
-            <div ref={messagesEndRef} aria-hidden="true" />
-          </div>
+          {creatingQuiz ? (
+            <p className="chat-status" role="status">Đang soạn 5 câu từ toàn bộ tài liệu…</p>
+          ) : activeQuiz && finished ? (
+            <div className="quiz-player quiz-complete">
+              <p className="quiz-player-kicker">{activeQuiz.title}</p>
+              <h3 className="quiz-player-prompt">Bạn đúng {correctCount}/{activeQuiz.questions.length} câu.</h3>
+              <div className="quiz-complete-actions">
+                <button type="button" className="quiz-restart" onClick={() => openQuiz(activeQuiz)}>Làm lại đề này</button>
+                <button type="button" className="quiz-restart quiz-back-chat" onClick={() => setActiveQuiz(null)}>Trở về hỏi đáp</button>
+              </div>
+            </div>
+          ) : activeQuiz ? (
+            <StudyQuizPlayer
+              quiz={activeQuiz}
+              index={questionIndex}
+              selectedId={selectedId}
+              onSelect={selectChoice}
+              onNext={goNextQuestion}
+              onOpenPage={setPage}
+            />
+          ) : (
+            <div className="chat-messages" aria-live="polite" aria-label="Nội dung hội thoại">
+              {messages.map((message) => (
+                <article className={`chat-message ${message.role === "student" ? "student-message" : "assistant-message"}`} key={message.id}>
+                  {message.role === "assistant" && <span className="message-avatar"><BookOpen aria-hidden="true" /></span>}
+                  <div className="message-content">
+                    {message.role === "assistant" && <span className="message-author">NEULEARN</span>}
+                    <p className="chat-answer-text">{message.text}</p>
+                    {message.citations && message.citations.length > 0 && (
+                      <ul className="chat-citations" aria-label="Nguồn trích dẫn trong tài liệu">
+                        {message.citations.map((citation) => (
+                          <li key={citation.id}>
+                            <button type="button" className="chat-citation" onClick={() => setPage(citation.page)} title="Mở trang này trong tài liệu">
+                              <strong>[{citation.id}] Trang {citation.page}</strong>
+                              <span>“{citation.quote}”</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </article>
+              ))}
+              {answering && <p className="chat-status" role="status">Đang tìm trong tài liệu…</p>}
+              <div ref={messagesEndRef} aria-hidden="true" />
+            </div>
+          )}
 
           <div className="chat-bottom-area">
-            <p className="tool-label">Công cụ học tập</p>
             <div className="study-tools">
-              <button type="button" className="study-tool tool-quiz" onClick={createQuiz}><ListChecks aria-hidden="true" /><strong>Tạo quiz</strong></button>
-              <button type="button" className="study-tool tool-map" onClick={createMindMap}><Workflow aria-hidden="true" /><strong>Tạo mind map</strong></button>
-              {resource.hasCode && <button type="button" className="study-tool tool-code" onClick={onLearnCode}><Code2 aria-hidden="true" /><strong>Học code</strong></button>}
+              <button type="button" className="study-tool tool-quiz" onClick={() => void createQuiz()} disabled={!canChat || creatingQuiz}>
+                <ListChecks aria-hidden="true" /><strong>{creatingQuiz ? "Đang tạo quiz…" : "Tạo quiz"}</strong>
+              </button>
+              {resource.hasCode && (
+                <button type="button" className="study-tool tool-practice" onClick={onPracticeCode}>
+                  <Code2 aria-hidden="true" /><strong>Luyện tập lập trình</strong>
+                </button>
+              )}
             </div>
 
             <form className="chat-composer" onSubmit={handleSubmit}>
               <MessageCircle className="composer-icon" aria-hidden="true" />
               <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Hỏi về nội dung trong slide..." rows={1} disabled={!canChat} aria-label="Nhập câu hỏi về tài liệu" />
-              <span className="composer-hint">Shift + Enter xuống dòng</span>
               <button type="submit" className="send-button" disabled={!draft.trim() || answering || !canChat} aria-label="Gửi câu hỏi"><Send aria-hidden="true" /></button>
             </form>
-            <p className="assistant-disclaimer">Hãy đối chiếu nội dung trả lời với tài liệu gốc.</p>
           </div>
         </section>
+
+        <QuizHistoryPane quizzes={quizzes} activeId={activeQuiz?.id ?? null} loading={historyLoading} onSelect={openQuiz} />
       </div>
     </main>
   )
