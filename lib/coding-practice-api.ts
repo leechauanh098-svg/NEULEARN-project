@@ -1,4 +1,5 @@
 import javaExercisesData from "./data/java-exercises.json"
+import { getFlaskCodingExercises } from "./flask-api"
 
 export type TaskValidation = {
   type: "regex" | "contains"
@@ -40,8 +41,12 @@ export type CheckResult = {
 
 export const staticJavaExercises: CodingExercise[] = javaExercisesData as CodingExercise[]
 
-export async function fetchJavaExercises(_token?: string): Promise<CodingExercise[]> {
+export async function fetchJavaExercises(token?: string, courseId?: string): Promise<CodingExercise[]> {
   try {
+    if (token && courseId) {
+      const data = await getFlaskCodingExercises(token, courseId)
+      if (Array.isArray(data.exercises) && data.exercises.length > 0) return data.exercises as CodingExercise[]
+    }
     const res = await fetch("/data/java-exercises.json")
     if (res.ok) {
       const data = await res.json()

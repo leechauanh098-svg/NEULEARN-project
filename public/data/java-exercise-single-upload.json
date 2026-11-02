@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "language": "java",
+  "exercises": [
+    {
+      "id": "java-input-greeting",
+      "course": "Lập trình Java",
+      "title": "In lời chào bằng Java",
+      "subtitle": "Ôn tập · 5 phút",
+      "fileName": "Greeting.java",
+      "lesson": "### In dữ liệu ra màn hình\n\nTrong bài tập này, bạn sẽ thực hành khai báo một biến String và sử dụng System.out.println() để in lời chào ra màn hình console.",
+      "starterCode": "public class Greeting {\n\tpublic static void main(String[] args) {\n\n\t}\n}",
+      "solutionCode": "public class Greeting {\n\tpublic static void main(String[] args) {\n\t\tString message = \"Xin chào Java\";\n\t\tSystem.out.println(message);\n\t}\n}",
+      "solutionExplanation": "1. Khai báo biến message kiểu String.\n2. Gán chuỗi \"Xin chào Java\" cho biến message.\n3. Dùng System.out.println(message) để in lời chào ra console.",
+      "defaultOutput": "Xin chào Java",
+      "tasks": [
+        {
+          "id": 1,
+          "title": "Khai báo biến message",
+          "text": "Hãy tạo một biến tên là message thuộc kiểu String và gán cho biến này một chuỗi ký tự.",
+          "hint": "Ví dụ: String message = \"Xin chào Java\";",
+          "validation": {
+            "type": "regex",
+            "pattern": "String\\s+message\\s*=\\s*\"[^\"]*\"\\s*;",
+            "errorMessage": "Hãy khai báo biến message kiểu String, ví dụ: String message = \"Xin chào Java\";"
+          }
+        },
+        {
+          "id": 2,
+          "title": "In lời chào",
+          "text": "Sử dụng System.out.println() để in biến message ra màn hình console.",
+          "hint": "Dùng lệnh: System.out.println(message);",
+          "validation": {
+            "type": "regex",
+            "pattern": "System\\.out\\.println\\s*\\(\\s*message\\s*\\)\\s*;",
+            "errorMessage": "Hãy in biến message bằng System.out.println(message);"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -33,6 +33,13 @@ export type CourseImportResult = {
   failed: string[]
 }
 
+export type CodingExerciseUploadInput = {
+  courseId: string
+  title: string
+  language: string
+  file: File
+}
+
 function getPdfTitle(file: File) {
   return file.name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim().slice(0, 180)
 }
@@ -48,6 +55,7 @@ type TeacherDashboardScreenProps = {
   onCreateCourse: (name: string, category: string, description: string) => Promise<void>
   onBulkImport: (inputs: BulkUploadMaterialInput[]) => Promise<BulkUploadResult>
   onBulkImportCourses: (courses: CourseImportInput[]) => Promise<CourseImportResult>
+  onUploadCodingExercises: (input: CodingExerciseUploadInput) => Promise<{ exerciseCount: number }>
   onDeleteMaterial: (resourceId: string) => Promise<void>
   onDeleteCourse: (courseId: string) => Promise<void>
   onUpdateCourse: (courseId: string, values: { name: string; category: string; description: string }) => Promise<void>
@@ -72,6 +80,7 @@ export function TeacherDashboardScreen({
   onCreateCourse,
   onBulkImport,
   onBulkImportCourses,
+  onUploadCodingExercises,
   onDeleteMaterial,
   onDeleteCourse,
   onUpdateCourse,
@@ -101,6 +110,12 @@ export function TeacherDashboardScreen({
   const [courseJsonError, setCourseJsonError] = useState("")
   const [courseJsonNotice, setCourseJsonNotice] = useState("")
   const [courseJsonFailures, setCourseJsonFailures] = useState<string[]>([])
+  const [codingFile, setCodingFile] = useState<File | null>(null)
+  const [codingCourseId, setCodingCourseId] = useState("")
+  const [codingTitle, setCodingTitle] = useState("")
+  const [codingPreview, setCodingPreview] = useState<number | null>(null)
+  const [codingError, setCodingError] = useState("")
+  const [codingNotice, setCodingNotice] = useState("")
   const [editingItem, setEditingItem] = useState<{ kind: "course"; id: string } | { kind: "material"; id: string } | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [editCategory, setEditCategory] = useState("")
@@ -229,6 +244,56 @@ export function TeacherDashboardScreen({
     }
   }
 
+  const readCodingJson = async (file?: File) => {
+      setCodingFile(file ?? null)
+      setCodingPreview(null)
+      setCodingError("")
+      setCodingNotice("")
+      if (!file) return
+      try {
+        if (!file.name.toLowerCase().endsWith(".json")) throw new Error("File đề phải có đuôi .json.")
+        const parsed: unknown = JSON.parse(await file.text())
+        const exercises = Array.isArray(parsed)
+          ? parsed
+          : parsed && typeof parsed === "object" && "exercises" in parsed && Array.isArray(parsed.exercises)
+            ? parsed.exercises
+            : []
+        if (!exercises.length) throw new Error("JSON chưa có bài tập. Dùng mảng hoặc object có thuộc tính exercises.")
+        setCodingPreview(exercises.length)
+        setCodingNotice(`Đã đọc ${exercises.length} bài. Hệ thống sẽ kiểm tra chi tiết khi tải lên.`)
+      } catch (parseError) {
+        setCodingError(parseError instanceof Error ? parseError.message : "Không đọc được JSON đề.")
+      }
+    }
+
+  const uploadCodingJson = async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setCodingError("")
+      setCodingNotice("")
+      const course = courses.find((item) => item.id === codingCourseId)
+      if (!course || !codingFile || !codingPreview) {
+        setCodingError("Chọn môn học và file JSON hợp lệ trước.")
+        return
+      }
+      setBusy(true)
+      try {
+        const result = await onUploadCodingExercises({
+          courseId: course.id,
+          title: codingTitle.trim() || codingFile.name.replace(/\.json$/i, ""),
+          language: "java",
+          file: codingFile,
+        })
+        setCodingNotice(`Đã tải và phát hành ${result.exerciseCount} bài luyện code. Bộ đề cũ cùng môn đã được lưu trữ.`)
+        setCodingFile(null)
+        setCodingPreview(null)
+        setCodingTitle("")
+      } catch (uploadError) {
+        setCodingError(uploadError instanceof Error ? uploadError.message : "Không thể tải bộ đề.")
+      } finally {
+        setBusy(false)
+      }
+  }
+
   const importCourses = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setCourseJsonError("")
@@ -238,7 +303,6 @@ export function TeacherDashboardScreen({
       setCourseJsonError("Chọn file JSON môn học hợp lệ trước.")
       return
     }
-
     setBusy(true)
     try {
       const result = await onBulkImportCourses(courseJsonRows)
@@ -536,6 +600,22 @@ export function TeacherDashboardScreen({
   { "course": "Mạng máy tính", "category": "Cơ sở ngành", "description": "Kiến thức mạng và Internet" }
 ]`}</pre>
           </details>
+        </section>
+
+        <section className="teacher-panel teacher-bulk-panel" aria-labelledby="coding-json-title">
+          <div className="teacher-panel-heading">
+            <span><FileUp aria-hidden="true" /></span>
+            <div><p className="student-eyebrow">LUYỆN TẬP CODE</p><h2 id="coding-json-title">Tải đề luyện code JSON</h2></div>
+          </div>
+          <form className="teacher-bulk-form" onSubmit={uploadCodingJson}>
+            <label className="form-field"><span>Môn học</span><select value={codingCourseId} onChange={(event) => setCodingCourseId(event.target.value)} required disabled={busy || courses.length === 0}><option value="" disabled>Chọn môn học</option>{courses.map((course) => <option value={course.id} key={course.id}>{course.name}</option>)}</select></label>
+            <label className="form-field"><span>Tên bộ đề</span><input value={codingTitle} onChange={(event) => setCodingTitle(event.target.value)} placeholder="Ví dụ: Java cơ bản - Biến" maxLength={180} disabled={busy} /></label>
+            <label className="form-field"><span>File JSON đề bài</span><input type="file" accept=".json,application/json" required disabled={busy} onChange={(event) => void readCodingJson(event.target.files?.[0])} /></label>
+            <p className="teacher-bulk-summary">{codingPreview ? `${codingPreview} bài hợp lệ sơ bộ đã đọc · ngôn ngữ Java` : "Tối đa 5 MB · hỗ trợ format mảng hoặc object { exercises: [] }"}</p>
+            {codingError && <p className="auth-error" role="alert">{codingError}</p>}
+            {codingNotice && <p className="teacher-success" role="status">{codingNotice}</p>}
+            <button className="primary-button auth-submit" type="submit" disabled={busy || !codingFile || !codingPreview || !codingCourseId}><Upload aria-hidden="true" /> {busy ? "Đang kiểm tra / tải lên..." : "Tải đề luyện code"}</button>
+          </form>
         </section>
 
       </section>

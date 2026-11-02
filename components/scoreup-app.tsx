@@ -22,6 +22,7 @@ import {
   type BulkUploadResult,
   type CourseImportInput,
   type CourseImportResult,
+  type CodingExerciseUploadInput,
 } from "@/components/screens/teacher-dashboard-screen"
 import { getSupabaseClient } from "@/lib/supabase"
 import {
@@ -50,6 +51,7 @@ import {
   updateFlaskMaterial,
   updateFlaskProfile,
   uploadFlaskMaterial,
+  uploadFlaskCodingExerciseSet,
 } from "@/lib/flask-api"
 import type { User } from "@supabase/supabase-js"
 
@@ -616,6 +618,11 @@ export function ScoreUpApp() {
     return { uploaded: createdResources.length, failed }
   }
 
+  const uploadCodingExercises = async (input: CodingExerciseUploadInput) => {
+    const { set } = await uploadFlaskCodingExerciseSet(await getAccessToken(), input)
+    return { exerciseCount: set.exercise_count }
+  }
+
   const openCourse = (course: string) => {
     setSelectedCourse(course)
     setScreen("course")
@@ -642,6 +649,9 @@ export function ScoreUpApp() {
     onManageUsers: navigateManageUsers,
     onOpenAccount: navigateAccount,
   }
+  const selectedManagedCourse = managedCourses.find((course) => course.name === selectedCourse)
+  const canViewSelectedCourseAnalytics = studentRole === "admin"
+    || (studentRole === "lecturer" && selectedManagedCourse?.createdBy === studentId)
   const saveAccountName = useCallback(async (fullName: string) => {
     const { profile } = await updateFlaskProfile(await getAccessToken(), fullName)
     setStudentName(profile.full_name || "Sinh viên")
@@ -855,6 +865,7 @@ export function ScoreUpApp() {
       onCreateCourse={createCourse}
       onBulkImport={bulkUploadMaterials}
       onBulkImportCourses={bulkImportCourses}
+      onUploadCodingExercises={uploadCodingExercises}
       onDeleteMaterial={deleteMaterial}
       onDeleteCourse={deleteCourse}
       onUpdateCourse={updateCourse}
@@ -903,6 +914,7 @@ export function ScoreUpApp() {
     return (
       <CourseScreen
         courseName={selectedCourse}
+        courseId={canViewSelectedCourseAnalytics ? selectedManagedCourse?.id : undefined}
         courseDescription={managedCourses.find((course) => course.name === selectedCourse)?.description ?? ""}
         resources={allResources}
         studentName={studentName}
@@ -915,6 +927,8 @@ export function ScoreUpApp() {
         onOpenGuide={navigateGuide}
         onLogout={logout}
         managementNavigation={managementNavigation}
+        canViewQuestionAnalytics={canViewSelectedCourseAnalytics}
+        getAccessToken={getAccessToken}
       />
     )
   }

@@ -11,6 +11,7 @@ NEULEARN là ứng dụng học tập trực tuyến giúp người học tìm m
 - Xem thống kê thời gian học và tài liệu đã mở theo ngày.
 - Mở trang quản lý tài khoản từ avatar, đổi tên hiển thị và truy cập nhanh tài liệu/thống kê.
 - Giảng viên: tạo môn học, nhập danh sách môn, tải lên một hoặc nhiều PDF, chỉnh sửa và xóa nội dung do mình quản lý.
+- Giảng viên và quản trị viên: tải file JSON đề luyện code trong màn hình Quản lý học liệu; đề hợp lệ được phát hành theo môn học và thay thế phiên bản cũ.
 - Quản trị viên: quản lý hồ sơ người dùng, vai trò, môn học và học liệu.
 
 ## Công nghệ và kiến trúc
@@ -52,7 +53,12 @@ Trên máy khác, chạy lại `npm run setup:env` rồi điền cùng URL và p
 
 1. Mở **Supabase Dashboard → SQL Editor**.
 2. Áp dụng lần lượt toàn bộ file `.sql` trong `supabase/migrations`, theo thứ tự tên file/thời gian. Các migration tạo hồ sơ, dữ liệu học tập, bảng môn học/tài liệu, chính sách truy cập và hàm thống kê.
-3. Nếu cần quản trị viên ban đầu, đăng nhập tài khoản đó ít nhất một lần để tạo hồ sơ, sau đó chạy SQL với email chính xác:
+
+Các câu hỏi sinh viên gửi trong khung chat tài liệu được ghi nhận theo môn học. Giảng viên mở một môn học rồi chọn **Thống kê câu hỏi** để xem các câu hỏi phổ biến; bản tóm tắt AI chỉ được tạo khi bấm nút trong dashboard và chỉ người quản lý môn học (hoặc admin) xem được.
+
+Nếu dashboard báo `Could not find the table 'public.student_questions' in the schema cache`, hãy chạy riêng migration `20261102000000_question_analytics.sql` trong Supabase SQL Editor, sau đó chạy `notify pgrst, 'reload schema';` và khởi động lại Flask. Kiểm tra bảng bằng `select to_regclass('public.student_questions');`; kết quả phải là `public.student_questions`.
+3. Migration `20261103000000_coding_exercise_sets.sql` tạo bảng/bucket đề luyện code. File JSON hỗ trợ mảng bài tập hoặc object `{ "version": 1, "language": "java", "exercises": [] }`; mỗi bài cần `id`, `title`, `fileName`, `lesson`, mã khởi đầu/lời giải và `tasks`.
+4. Nếu cần quản trị viên ban đầu, đăng nhập tài khoản đó ít nhất một lần để tạo hồ sơ, sau đó chạy SQL với email chính xác:
 
 ```sql
 update public.profiles

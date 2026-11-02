@@ -44,6 +44,27 @@ export type DailyActivityRow = {
   was_accessed: boolean
 }
 
+export type QuestionAnalytics = {
+  totalQuestions: number
+  uniqueQuestions: number
+  studentCount: number
+  topQuestions: Array<{
+    question: string
+    count: number
+    latestAt: string | null
+    materials: string[]
+  }>
+}
+
+export type QuestionAnalyticsSummary = {
+  summary: string
+  topTopics: Array<{
+    topic: string
+    questionCount: number
+    description: string
+  }>
+}
+
 export type BulkCourseInput = {
   course: string
   category: string
@@ -57,6 +78,21 @@ export type MaterialUploadInput = {
   description: string
   slideCount: number
   file: File
+}
+
+export type CodingExerciseSetRow = {
+  id: string
+  course_id: string
+  title: string
+  language: string
+  version: number
+  file_name: string
+  file_size: number
+  exercise_count: number
+  status: "draft" | "published" | "archived"
+  uploaded_by: string
+  created_at: string
+  published_at: string | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -171,6 +207,21 @@ export function saveFlaskStudyActivity(
     method: "POST",
     json: activity,
   })
+}
+
+export function getFlaskQuestionAnalytics(accessToken: string, courseId: string) {
+  return requestFlask<{ analytics: QuestionAnalytics }>(
+    `/api/courses/${encodeURIComponent(courseId)}/question-analytics`,
+    accessToken,
+  )
+}
+
+export function summarizeFlaskQuestionAnalytics(accessToken: string, courseId: string) {
+  return requestFlask<{ summary: QuestionAnalyticsSummary; generatedAt: string | null; cached: boolean }>(
+    `/api/courses/${encodeURIComponent(courseId)}/question-analytics/summary`,
+    accessToken,
+    { method: "POST", json: {} },
+  )
 }
 
 export function getFlaskSignedUrl(accessToken: string, resourceId: string) {
@@ -295,6 +346,28 @@ export async function uploadFlaskMaterial(accessToken: string, input: MaterialUp
     method: "POST",
     body: formData,
   })
+}
+
+export async function uploadFlaskCodingExerciseSet(
+  accessToken: string,
+  input: { courseId: string; title: string; language: string; file: File },
+) {
+  const formData = new FormData()
+  formData.set("courseId", input.courseId)
+  formData.set("title", input.title)
+  formData.set("language", input.language)
+  formData.set("file", input.file)
+  return requestFlask<{ set: CodingExerciseSetRow }>("/api/coding/exercise-sets", accessToken, {
+    method: "POST",
+    body: formData,
+  })
+}
+
+export function getFlaskCodingExercises(accessToken: string, courseId: string, language = "java") {
+  return requestFlask<{ exercises: unknown[]; source: string }>(
+    `/api/coding/exercises?courseId=${encodeURIComponent(courseId)}&language=${encodeURIComponent(language)}`,
+    accessToken,
+  )
 }
 
 export function updateFlaskMaterial(

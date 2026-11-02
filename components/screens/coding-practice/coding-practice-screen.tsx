@@ -17,7 +17,7 @@ type Props = {
   getAccessToken: () => Promise<string>
 }
 
-export function CodingPracticeScreen({ resource, onBack, onHome }: Props) {
+export function CodingPracticeScreen({ resource, onBack, onHome, getAccessToken }: Props) {
   const [exercises, setExercises] = useState<CodingExercise[]>(staticJavaExercises)
   const [exerciseIndex, setExerciseIndex] = useState(0)
   const [code, setCode] = useState("")
@@ -38,7 +38,8 @@ export function CodingPracticeScreen({ resource, onBack, onHome }: Props) {
   // ─── Initialize exercise ─────────────────────────────────────────────────────
   const loadExercises = useCallback(async () => {
     try {
-      const list = await fetchJavaExercises()
+      const token = await getAccessToken()
+      const list = await fetchJavaExercises(token, resource.courseId)
       if (list && list.length > 0) {
         setExercises(list)
         setCode(list[0].starterCode)
@@ -48,7 +49,7 @@ export function CodingPracticeScreen({ resource, onBack, onHome }: Props) {
     } catch {
       setCode(staticJavaExercises[0].starterCode)
     }
-  }, [])
+  }, [getAccessToken, resource.courseId])
 
   useEffect(() => {
     void loadExercises()
